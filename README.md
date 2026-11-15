@@ -1,8 +1,9 @@
 # Starship 타워 캐치의 공학
 
-Starship Flight 15에서 Ship 42가 발사탑 팔(Mechazilla)에 안착하기까지, 마지막 18초의 랜딩 번을 단계별로 보여주는 인터랙티브 엔지니어링 인포그래픽이다. 시뮬레이션 애니메이션, 실시간 텔레메트리, 핵심 수식 6개, 점화 고도 계산기를 HTML 파일 하나에 담았다.
+![Starship 타워 캐치 시뮬레이터 화면](starship_landing_simulator.jpg)
 
-Claude Fable 5.2에게 프롬프트 한 번과 중계 화면 캡처 두 장을 주고 만들었다.
+Starship Flight 15에서 Ship 42가 발사탑 팔(Mechazilla)에 안착하기까지, 마지막 18초의 랜딩 번을 단계별로 보여주는 인터랙티브 엔지니어링 인포그래픽. 
+Claude Fable 5.2를 이용하여 시뮬레이션 애니메이션, 실시간 텔레메트리, 핵심 수식 6개, 점화 고도 계산기를 포함한 싱글 HTML 애플리케이션.
 
 ## 실행 방법
 
