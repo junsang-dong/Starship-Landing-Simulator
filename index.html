@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starship 타워 캐치의 공학</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: overcast-sky drafting sheet. Simulation canvas left, telemetry rail right, formula sheet below. Single theme by choice. */
+:root{
+  color-scheme: dark;
+  --bg:#111c26;
+  --panel:#182733;
+  --panel-2:#1e3040;
+  --line:#2e4557;
+  --ink:#e8eef2;
+  --muted:#93a8b7;
+  --flame:#ffb23e;
+  --draft:#76d6ea;
+  --ok:#86e2ab;
+  --font-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.25}
+h1{font-size:clamp(26px,4vw,38px);font-weight:700;letter-spacing:-0.01em}
+h2{font-size:20px;font-weight:600}
+h3{font-size:15px;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:.12em;color:var(--draft);text-transform:uppercase}
+.lede{color:var(--muted);max-width:68ch}
+header{display:flex;flex-direction:column;gap:10px}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.fact{border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:13px;color:var(--muted);background:var(--panel)}
+.fact b{color:var(--ink);font-weight:600;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+.phases{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.phase{appearance:none;font:inherit;color:var(--muted);text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:9px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.phase .n{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em}
+.phase .t{font-weight:600;font-size:14px;color:var(--ink)}
+.phase[aria-pressed="true"]{border-color:var(--flame);background:var(--panel-2)}
+.phase[aria-pressed="true"] .n{color:var(--flame)}
+.phase:hover{border-color:var(--muted)}
+
+.stage{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:16px;align-items:stretch}
+.scene{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#26343f;min-height:420px}
+#scene{display:block;width:100%;height:100%;aspect-ratio:16/15}
+.clock{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:baseline;gap:10px;padding:10px 12px;background:linear-gradient(transparent,rgba(8,14,20,.82));font-family:var(--font-mono);pointer-events:none}
+.clock .tplus{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.clock .lab{font-size:11px;letter-spacing:.14em;color:var(--muted)}
+
+.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.tele{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.tele div{display:flex;flex-direction:column}
+.tele .k{font-size:12px;color:var(--muted)}
+.tele .v{font-family:var(--font-mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.tele .v small{font-size:12px;color:var(--muted);font-weight:400;margin-left:3px}
+.engs{display:inline-flex;gap:5px;align-items:center;height:30px}
+.engs i{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--muted);display:block}
+.engs i.on{background:var(--flame);border-color:var(--flame);box-shadow:0 0 8px var(--flame)}
+.caption h3{color:var(--flame);margin-bottom:4px}
+.caption p{font-size:14px;color:var(--ink)}
+.caption{min-height:150px}
+.chart h3{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px}
+.chart canvas{display:block;width:100%;height:96px}
+
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+button.play{appearance:none;font:inherit;font-weight:600;color:#1a1204;background:var(--flame);border:0;border-radius:6px;padding:7px 16px;cursor:pointer;min-width:92px}
+button.play:hover{filter:brightness(1.08)}
+#scrub{flex:1 1 220px;accent-color:var(--flame);min-width:160px}
+.controls label{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.controls select{font:inherit;font-size:13px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+.controls input[type=checkbox]{accent-color:var(--draft);width:16px;height:16px}
+:focus-visible{outline:2px solid var(--draft);outline-offset:2px}
+
+.sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.eq{display:flex;flex-direction:column;gap:8px}
+.eq .tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;color:var(--draft)}
+.eq p{font-size:14px;color:var(--muted)}
+.eq .m{background:var(--panel-2);border-radius:6px;padding:10px 8px;overflow-x:auto;text-align:center;color:var(--ink)}
+math{font-size:1.12em}
+.eq .m + .m{margin-top:-2px}
+
+.calc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px;align-items:center}
+.sliders{display:flex;flex-direction:column;gap:14px}
+.sliders label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.sliders label span b{color:var(--ink);font-family:var(--font-mono);font-weight:500}
+.sliders input{accent-color:var(--draft);width:100%}
+.outs{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.out{background:var(--panel-2);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column}
+.out .k{font-size:12px;color:var(--muted)}
+.out .v{font-family:var(--font-mono);font-size:20px;font-variant-numeric:tabular-nums}
+.out .v small{font-size:12px;color:var(--muted);margin-left:3px}
+
+.note{font-size:13px;color:var(--muted);max-width:80ch}
+.src{font-size:13px;color:var(--muted)}
+.src ul{margin:6px 0 0;padding-left:18px}
+.src a{color:var(--draft)}
+section{display:flex;flex-direction:column;gap:12px}
+
+@media (max-width:900px){
+  .stage{grid-template-columns:1fr}
+  .sheet{grid-template-columns:1fr 1fr}
+  .calc{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .phases{grid-template-columns:1fr 1fr}
+  .sheet{grid-template-columns:1fr}
+  #scene{aspect-ratio:4/5}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Starship Flight 15 · Ship 42 · Mechazilla catch</span>
+  <h1>Starship 타워 캐치의 공학</h1>
+  <p class="lede">궤도에서 돌아온 52 m 기체가 18초짜리 랜딩 번 한 번으로 발사탑 팔 사이에 멈춘다. 그 18초 동안 기체가 푸는 제어 문제와 수식을 단계별로 따라가 본다.</p>
+  <div class="facts">
+    <span class="fact">발사 <b>2026-11-13</b> Starbase Pad 2</span>
+    <span class="fact">궤도 체류 <b>약 22.5 h</b></span>
+    <span class="fact">랜딩 번 점화 <b>T+22:32:16</b></span>
+    <span class="fact">3→2기 <b>:26</b> · 2→1기 <b>:33</b></span>
+    <span class="fact">소화·캐치 <b>T+22:32:34</b></span>
+    <span class="fact">기체 길이 <b>약 52 m</b></span>
+  </div>
+</header>
+
+<div class="phases" role="group" aria-label="단계 이동">
+  <button class="phase" id="ph0" data-t="-5" aria-pressed="false"><span class="n">01 · T−5 s</span><span class="t">벨리플롭 하강</span></button>
+  <button class="phase" id="ph1" data-t="0" aria-pressed="false"><span class="n">02 · 0–5 s</span><span class="t">점화와 플립</span></button>
+  <button class="phase" id="ph2" data-t="5" aria-pressed="false"><span class="n">03 · 5–16 s</span><span class="t">감속과 정렬</span></button>
+  <button class="phase" id="ph3" data-t="16" aria-pressed="false"><span class="n">04 · 16–18 s</span><span class="t">캐치</span></button>
+</div>
+
+<div class="stage">
+  <div class="scene">
+    <canvas id="scene" aria-label="Starship 착륙 캐치 시뮬레이션 애니메이션"></canvas>
+    <div class="clock"><span class="lab">T+</span><span class="tplus" id="clock">22:32:16.0</span><span class="lab">STARSHIP FLIGHT 15</span></div>
+  </div>
+
+  <div class="rail">
+    <div class="card tele">
+      <div><span class="k">캐치 지점까지 높이</span><span class="v"><span id="tH">485</span><small>m</small></span></div>
+      <div><span class="k">하강 속도</span><span class="v"><span id="tV">72.0</span><small>m/s</small></span></div>
+      <div><span class="k">피치각 θ</span><span class="v"><span id="tTh">90.0</span><small>°</small></span></div>
+      <div><span class="k">수평 오차 Δx</span><span class="v"><span id="tX">90.0</span><small>m</small></span></div>
+      <div><span class="k">점화 엔진</span><span class="engs" id="tE" aria-label="점화 엔진 수"><i></i><i></i><i></i></span></div>
+      <div><span class="k">추력 / 중량 (수직)</span><span class="v" id="tTwr">0.00</span></div>
+    </div>
+    <div class="card caption" aria-live="polite">
+      <h3 id="capT"></h3>
+      <p id="capP"></p>
+    </div>
+    <div class="card chart">
+      <h3>하강 속도 v(t)와 엔진 수</h3>
+      <canvas id="cv"></canvas>
+    </div>
+    <div class="card chart">
+      <h3>피치각 θ(t), 2차 시스템 응답</h3>
+      <canvas id="cth"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="play" id="play" type="button">일시정지</button>
+  <input type="range" id="scrub" min="-5" max="23" step="0.02" value="-5" aria-label="시간 이동">
+  <label for="speed">재생 속도
+    <select id="speed"><option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option><option value="1">1×</option></select>
+  </label>
+  <label for="vec"><input type="checkbox" id="vec" checked> 힘 벡터 표시</label>
+</div>
+
+<p class="note">타임라인은 공개된 Flight 15 계획 시각을 따랐다. 질량 150 t, 종단속도 72 m/s, 감속 곡선, 플립 응답은 그 시각에 맞춘 교육용 근사 모델이며 SpaceX 실측값이 아니다.</p>
+
+<section>
+  <span class="eyebrow">Formula sheet</span>
+  <h2>18초를 지배하는 여섯 개의 식</h2>
+  <div class="sheet">
+    <div class="card eq">
+      <span class="tag">01 · 벨리플롭</span>
+      <h3>종단속도</h3>
+      <div class="m"><math display="block"><msub><mi>v</mi><mi>t</mi></msub><mo>=</mo><msqrt><mfrac><mrow><mn>2</mn><mi>m</mi><mi>g</mi></mrow><mrow><mi>ρ</mi><msub><mi>C</mi><mi>d</mi></msub><mi>A</mi></mrow></mfrac></msqrt></math></div>
+      <p>항력이 중력과 같아지면 속도는 더 늘지 않는다. 기체를 눕혀 면적 A를 최대로 만들면 연료 없이 대부분의 속도를 버릴 수 있다. 플랩 네 장은 A와 압력 중심을 바꿔 자세와 낙하 지점을 조정한다.</p>
+    </div>
+    <div class="card eq">
+      <span class="tag">02 · 플립</span>
+      <h3>짐벌 토크와 자세 응답</h3>
+      <div class="m"><math display="block"><mi>I</mi><mover><mi>θ</mi><mo>¨</mo></mover><mo>=</mo><mi>T</mi><mi>ℓ</mi><mspace width="0.2em"/><mi>sin</mi><mi>δ</mi></math></div>
+      <div class="m"><math display="block"><mover><mi>θ</mi><mo>¨</mo></mover><mo>+</mo><mn>2</mn><mi>ζ</mi><msub><mi>ω</mi><mi>n</mi></msub><mover><mi>θ</mi><mo>˙</mo></mover><mo>+</mo><msubsup><mi>ω</mi><mi>n</mi><mn>2</mn></msubsup><mi>θ</mi><mo>=</mo><mn>0</mn></math></div>
+      <p>노즐을 δ만큼 꺾으면 추력 T가 무게중심에서 ℓ 떨어진 곳에 토크를 만든다. 자세 제어기를 닫으면 2차 시스템처럼 움직인다. 이 화면은 ζ = 0.7, ω<sub>n</sub> = 1.0 rad/s로 그렸다.</p>
+    </div>
+    <div class="card eq">
+      <span class="tag">03 · 감속</span>
+      <h3>점화 고도</h3>
+      <div class="m"><math display="block"><mi>h</mi><mo>=</mo><mfrac><msubsup><mi>v</mi><mi>t</mi><mn>2</mn></msubsup><mrow><mn>2</mn><mi>a</mi></mrow></mfrac><mo>,</mo><mspace width="0.6em"/><mi>a</mi><mo>=</mo><mfrac><mi>T</mi><mi>m</mi></mfrac><mo>−</mo><mi>g</mi></math></div>
+      <p>속도가 0이 되는 높이가 캐치 레일과 정확히 일치해야 한다. 일찍 켜면 연료가 모자라고 늦게 켜면 멈추지 못한다. 엔진을 3→2→1기로 줄이는 것은 추력 하한을 낮춰 마지막 구간을 섬세하게 다루기 위해서다.</p>
+    </div>
+    <div class="card eq">
+      <span class="tag">04 · 연료</span>
+      <h3>중력 손실과 로켓 방정식</h3>
+      <div class="m"><math display="block"><mi>Δ</mi><mi>v</mi><mo>=</mo><msub><mi>v</mi><mi>t</mi></msub><mo>+</mo><mi>g</mi><msub><mi>t</mi><mi>b</mi></msub></math></div>
+      <div class="m"><math display="block"><msub><mi>m</mi><mi>p</mi></msub><mo>=</mo><msub><mi>m</mi><mi>f</mi></msub><mrow><mo>(</mo><msup><mi>e</mi><mrow><mi>Δ</mi><mi>v</mi><mo>/</mo><msub><mi>I</mi><mi>sp</mi></msub><msub><mi>g</mi><mn>0</mn></msub></mrow></msup><mo>−</mo><mn>1</mn><mo>)</mo></mrow></math></div>
+      <p>연소 시간 t<sub>b</sub>가 길수록 중력과 싸우는 데 연료가 든다. 그래서 낮은 고도에서 짧고 강하게 감속하는 쪽이 유리하고, 그만큼 타이밍 여유는 줄어든다.</p>
+    </div>
+    <div class="card eq">
+      <span class="tag">05 · 유도</span>
+      <h3>동력 하강 최적화</h3>
+      <div class="m"><math display="block"><munder><mi>min</mi><mi>T</mi></munder><msubsup><mo>∫</mo><mn>0</mn><msub><mi>t</mi><mi>f</mi></msub></msubsup><mo>‖</mo><mi>T</mi><mo>(</mo><mi>t</mi><mo>)</mo><mo>‖</mo><mspace width="0.2em"/><mi>d</mi><mi>t</mi></math></div>
+      <div class="m"><math display="block"><mi>r</mi><mo>(</mo><msub><mi>t</mi><mi>f</mi></msub><mo>)</mo><mo>=</mo><msub><mi>r</mi><mi>c</mi></msub><mo>,</mo><mspace width="0.4em"/><mi>v</mi><mo>(</mo><msub><mi>t</mi><mi>f</mi></msub><mo>)</mo><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="0.4em"/><msub><mi>T</mi><mi>min</mi></msub><mo>≤</mo><mo>‖</mo><mi>T</mi><mo>‖</mo><mo>≤</mo><msub><mi>T</mi><mi>max</mi></msub></math></div>
+      <p>연료를 최소로 쓰면서 종단 위치 r<sub>c</sub>와 속도 0을 동시에 맞추는 궤적 문제다. 볼록 최적화 형태로 바꾸면 비행 컴퓨터가 실시간으로 다시 풀 수 있고, 팰컨 9 착륙에서 공개된 접근이기도 하다.</p>
+    </div>
+    <div class="card eq">
+      <span class="tag">06 · 캐치</span>
+      <h3>암의 완충</h3>
+      <div class="m"><math display="block"><mi>m</mi><mover><mi>x</mi><mo>¨</mo></mover><mo>+</mo><mi>c</mi><mover><mi>x</mi><mo>˙</mo></mover><mo>+</mo><mi>k</mi><mi>x</mi><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="0.6em"/><mi>c</mi><mo>≈</mo><mn>2</mn><msqrt><mrow><mi>k</mi><mi>m</mi></mrow></msqrt></math></div>
+      <p>기체 상단의 캐치 핀이 암 위 레일에 얹히는 순간 남은 운동에너지 ½mv²를 완충 장치가 흡수한다. 임계 감쇠에 가깝게 맞추면 되튐 없이 가장 빨리 멈춘다. 착륙 다리가 탑으로 옮겨 간 셈이라 기체는 그만큼 가벼워진다.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Try it</span>
+  <h2>점화 고도 계산기</h2>
+  <div class="card calc">
+    <div class="sliders">
+      <label for="cm"><span>착륙 질량 m <b id="cmV">150 t</b></span><input type="range" id="cm" min="100" max="200" step="5" value="150"></label>
+      <label for="ca"><span>평균 감속도 a <b id="caV">4.0 m/s²</b></span><input type="range" id="ca" min="2" max="8" step="0.1" value="4"></label>
+      <p class="note">가정: ρ = 1.2 kg/m³, C<sub>d</sub>A = 470 m², I<sub>sp</sub> = 330 s, 등감속.</p>
+    </div>
+    <div class="outs">
+      <div class="out"><span class="k">종단속도</span><span class="v"><span id="oV"></span><small>m/s</small></span></div>
+      <div class="out"><span class="k">점화 고도</span><span class="v"><span id="oH"></span><small>m</small></span></div>
+      <div class="out"><span class="k">연소 시간</span><span class="v"><span id="oT"></span><small>s</small></span></div>
+      <div class="out"><span class="k">필요 Δv</span><span class="v"><span id="oD"></span><small>m/s</small></span></div>
+      <div class="out"><span class="k">추진제</span><span class="v"><span id="oP"></span><small>t</small></span></div>
+    </div>
+  </div>
+</section>
+
+<div class="src">
+  출처
+  <ul>
+    <li><a href="https://en.wikipedia.org/wiki/Starship_flight_15">Wikipedia, Starship flight 15</a> (랜딩 번 타임라인)</li>
+    <li><a href="https://www.nasaspaceflight.com/2026/11/starship-flight-15-spacex-history/">NASASpaceFlight, Starship Flight 15</a></li>
+    <li><a href="https://www.cnn.com/2026/11/13/science/live-news/spacex-starship-flight-15-ship-catch">CNN, Starship nails historic ship catch</a></li>
+    <li><a href="https://www.youtube.com/watch?v=VEvzBhRyB94">CNET, SpaceX Catches Starship for the First Time</a></li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+var T0=-5, T1=23, G=9.81, K2=12.5/7;
+function ss(a,b,x){x=Math.min(1,Math.max(0,(x-a)/(b-a)));return x*x*(3-2*x);}
+function kin(t){
+  var v,h,a,eng,u;
+  if(t<0){v=72;h=485-72*t;a=0;eng=0;}
+  else if(t<10){u=10-t;v=14+5.8*u;h=55+14*u+2.9*u*u;a=5.8;eng=3;}
+  else if(t<17){u=17-t;v=1.5+K2*u;h=0.75+1.5*u+0.5*K2*u*u;a=K2;eng=2;}
+  else if(t<18){u=18-t;v=1.5*u;h=0.75*u*u;a=1.5;eng=1;}
+  else{v=0;h=0;a=0;eng=0;}
+  var th=t<0?90:90*Math.exp(-0.7*t)*(Math.cos(0.714*t)+0.98*Math.sin(0.714*t));
+  var x=t<0?-90+4*t:-90*(1-ss(0,14,t));
+  var bob=0; if(t>=18){var s=t-18;bob=-0.8*Math.exp(-1.4*s)*Math.sin(4.2*s);}
+  return {v:v,h:h,a:a,eng:eng,th:th,x:x,bob:bob,arm:ss(15.6,17.8,t),twr:eng?(G+a)/G:0};
+}
+var CAPS=[
+ ["01 벨리플롭 하강","기체를 눕혀 배면 전체로 공기를 받는다. 항력이 중력과 같아지는 종단속도(모델값 72 m/s)에서 엔진 없이 떨어지며, 앞뒤 플랩 네 장을 접고 펴서 자세와 낙하 지점을 맞춘다. 이때 D = mg."],
+ ["02 점화와 플립","랩터 3기를 켜고 노즐을 짐벌해 무게중심 둘레에 토크를 만든다. 90° 누워 있던 기체가 약 4초 만에 수직으로 서고, 살짝 넘어갔다가 돌아오는 감쇠 응답을 보인다. 동시에 추력의 수직 성분이 감속을 시작한다."],
+ ["03 감속과 정렬","남은 높이에서 속도가 정확히 0이 되도록 추력을 조절한다. 10초에 3→2기로 줄여 추력 하한을 낮추고, 기체를 살짝 기울여 수평 오차 Δx를 0으로 수렴시킨다. 유도 컴퓨터는 궤적을 계속 다시 푼다."],
+ ["04 캐치","17초에 1기만 남기고 거의 호버 상태로 암 사이에 들어선다. 암이 닫히고 기체 상단의 캐치 핀이 레일에 얹히면 엔진을 끈다. 남은 운동에너지는 암의 완충 장치가 흡수한다."]
+];
+function phaseOf(t){return t<0?0:t<5?1:t<16?2:3;}
+
+var $=function(id){return document.getElementById(id);};
+var scene=$("scene"), cv=$("cv"), cth=$("cth");
+var t=T0, playing=true, speed=0.5, showVec=true, last=0, curPhase=-1;
+var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if(reduce){playing=false;t=2;}
+
+function fit(c){
+  var d=Math.min(2,window.devicePixelRatio||1), w=c.clientWidth, h=c.clientHeight;
+  if(c.width!==Math.round(w*d)||c.height!==Math.round(h*d)){c.width=Math.round(w*d);c.height=Math.round(h*d);}
+  var x=c.getContext("2d"); x.setTransform(d,0,0,d,0,0); return {x:x,w:w,h:h};
+}
+var MONO='"IBM Plex Mono",ui-monospace,monospace', SANS='"IBM Plex Sans KR",system-ui,sans-serif';
+
+function arrow(c,x0,y0,dx,dy,col,label){
+  var L=Math.hypot(dx,dy); if(L<4)return;
+  var ux=dx/L, uy=dy/L, x1=x0+dx, y1=y0+dy;
+  c.strokeStyle=col;c.fillStyle=col;c.lineWidth=2.2;
+  c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+  c.beginPath();c.moveTo(x1,y1);c.lineTo(x1-ux*9-uy*4.5,y1-uy*9+ux*4.5);c.lineTo(x1-ux*9+uy*4.5,y1-uy*9-ux*4.5);c.closePath();c.fill();
+  c.font="600 13px "+MONO;c.textAlign="left";c.textBaseline="middle";
+  c.fillText(label,x1+ux*8+8,y1+uy*8);
+}
+
+function tower(c,X,Y,sc,tx,alpha){
+  c.save();c.globalAlpha=alpha;
+  var x0=X(tx-6), x1=X(tx+6), yb=Y(0), yt=Y(146);
+  c.fillStyle="#1b2229";c.fillRect(x0,yt,x1-x0,yb-yt);
+  c.strokeStyle="#5b6a76";c.lineWidth=Math.max(0.6,sc*0.35);
+  c.beginPath();
+  for(var y=0;y<146;y+=12){
+    c.moveTo(x0,Y(y));c.lineTo(x1,Y(y+12));c.moveTo(x1,Y(y));c.lineTo(x0,Y(y+12));
+    c.moveTo(x0,Y(y));c.lineTo(x1,Y(y));
+  }
+  c.rect(x0,yt,x1-x0,yb-yt);c.stroke();
+  c.fillStyle="#2a343d";c.fillRect(X(tx-8),Y(152),16*sc,6*sc);
+  c.restore();
+}
+
+function drawScene(time){
+  var f=fit(scene), c=f.x, W=f.w, H=f.h, s=kin(t);
+  var armY=96, cy=armY-14+s.h+s.bob, cx=s.x;
+  var top=Math.max(215,cy+26+70), gy=H*0.9, sc=(gy-10)/top;
+  var cxw=(Math.min(cx,-14)+34)/2;
+  function X(x){return W/2+(x-cxw)*sc;} function Y(y){return gy-y*sc;}
+
+  var sky=c.createLinearGradient(0,0,0,gy);
+  sky.addColorStop(0,"#27343f");sky.addColorStop(0.7,"#56646f");sky.addColorStop(1,"#77848d");
+  c.fillStyle=sky;c.fillRect(0,0,W,gy);
+  c.fillStyle="#50606e";c.fillRect(0,gy-Math.max(3,4*sc),W,Math.max(3,4*sc));
+  c.fillStyle="#3a4039";c.fillRect(0,gy,W,H-gy);
+  c.fillStyle="#474d44";c.fillRect(X(-70),gy,150*sc,3);
+
+  // altitude ruler
+  var step=top>600?200:top>300?100:50;
+  c.font="11px "+MONO;c.textAlign="left";c.textBaseline="middle";
+  for(var y=step;y<top;y+=step){
+    c.strokeStyle="rgba(118,214,234,.16)";c.lineWidth=1;
+    c.beginPath();c.moveTo(0,Y(y));c.lineTo(W,Y(y));c.stroke();
+    c.fillStyle="rgba(118,214,234,.75)";c.fillText(y+" m",8,Y(y)-8);
+  }
+
+  tower(c,X,Y,sc,190,0.45);
+  tower(c,X,Y,sc,20,1);
+  // launch mount
+  c.fillStyle="#252d34";c.fillRect(X(-9),Y(20),18*sc,20*sc);
+  c.fillStyle="#3a4650";c.fillRect(X(-11),Y(22),22*sc,2.5*sc);
+
+  // catch target lines
+  c.setLineDash([5,5]);c.strokeStyle="rgba(118,214,234,.55)";c.lineWidth=1;
+  c.beginPath();c.moveTo(X(0),Y(22));c.lineTo(X(0),0);c.stroke();
+  c.setLineDash([]);
+
+  // far arm + carriage
+  c.fillStyle="#6d7b86";c.fillRect(X(-17),Y(armY+1.6),31*sc,3.2*sc);
+  c.fillStyle="#3b4853";c.fillRect(X(13),Y(armY+7),3*sc,14*sc);
+  if(sc>1.2){c.fillStyle="rgba(118,214,234,.9)";c.font="11px "+SANS;c.textAlign="right";c.fillText("캐치 레일",X(-19),Y(armY));}
+
+  // ship
+  var th=s.th*Math.PI/180;
+  c.save();c.translate(X(cx),Y(cy));c.rotate(th);c.scale(sc,sc);
+  if(s.eng){
+    var fl=0.88+0.12*Math.sin(time*0.045)+0.06*Math.sin(time*0.11);
+    var L=(20+12*s.twr)*fl;
+    for(var i=0;i<s.eng;i++){
+      var ex=(i-(s.eng-1)/2)*2.3;
+      var g=c.createLinearGradient(0,26,0,26+L);
+      g.addColorStop(0,"rgba(255,250,235,.98)");g.addColorStop(0.25,"rgba(255,190,90,.85)");g.addColorStop(1,"rgba(255,140,40,0)");
+      c.fillStyle=g;c.beginPath();c.moveTo(ex-1.1,26);c.quadraticCurveTo(ex-2.2,26+L*0.5,ex,26+L);c.quadraticCurveTo(ex+2.2,26+L*0.5,ex+1.1,26);c.closePath();c.fill();
+    }
+  }
+  c.fillStyle="#0e1215";
+  c.beginPath();c.moveTo(-4.5,-15);c.lineTo(-7.6,-9);c.lineTo(-7.6,-3);c.lineTo(-4.5,-4);c.closePath();c.fill();
+  c.beginPath();c.moveTo(4.5,-15);c.lineTo(7.6,-9);c.lineTo(7.6,-3);c.lineTo(4.5,-4);c.closePath();c.fill();
+  c.beginPath();c.moveTo(-4.5,9);c.lineTo(-9.4,17);c.lineTo(-9.4,26);c.lineTo(-4.5,26);c.closePath();c.fill();
+  c.beginPath();c.moveTo(4.5,9);c.lineTo(9.4,17);c.lineTo(9.4,26);c.lineTo(4.5,26);c.closePath();c.fill();
+  var bg=c.createLinearGradient(-4.5,0,4.5,0);
+  bg.addColorStop(0,"#12161a");bg.addColorStop(0.55,"#1f262c");bg.addColorStop(0.8,"#8d99a3");bg.addColorStop(1,"#55616b");
+  c.fillStyle=bg;c.beginPath();c.moveTo(0,-26);c.bezierCurveTo(2.6,-23,4.5,-18,4.5,-11);c.lineTo(4.5,26);c.lineTo(-4.5,26);c.lineTo(-4.5,-11);c.bezierCurveTo(-4.5,-18,-2.6,-23,0,-26);c.closePath();c.fill();
+  c.fillStyle="#76d6ea";c.beginPath();c.arc(-4.7,-14,0.9,0,7);c.arc(4.7,-14,0.9,0,7);c.fill();
+  c.restore();
+
+  // near arm (closes in front)
+  c.globalAlpha=0.12+0.6*s.arm;c.fillStyle="#9aa8b3";c.fillRect(X(-17),Y(armY+1.6),31*sc,3.2*sc);c.globalAlpha=1;
+
+  // lateral error dimension
+  if(Math.abs(cx)>3){
+    var yd=Y(cy-34)+34, xa=X(cx), xb=X(0);
+    c.strokeStyle="#76d6ea";c.fillStyle="#76d6ea";c.lineWidth=1;
+    c.beginPath();c.moveTo(xa,yd);c.lineTo(xb,yd);c.moveTo(xa,yd-4);c.lineTo(xa,yd+4);c.moveTo(xb,yd-4);c.lineTo(xb,yd+4);c.stroke();
+    c.font="11px "+MONO;c.textAlign="center";c.textBaseline="top";
+    if(xb-xa>46)c.fillText("Δx "+Math.abs(cx).toFixed(0)+" m",(xa+xb)/2,yd+5);
+  }
+
+  // force vectors
+  if(showVec){
+    var px=X(cx), py=Y(cy), U=42;
+    var dr=Math.pow(s.v/72,2)*(0.12+0.88*Math.pow(Math.sin(th),2));
+    arrow(c,px,py,0,U,"#e8eef2","mg");
+    arrow(c,px,py,0,-U*dr,"#76d6ea","D");
+    if(s.eng)arrow(c,px,py,Math.sin(th)*U*s.twr,-Math.cos(th)*U*s.twr,"#ffb23e","T");
+  }
+
+  // plan-view inset
+  var iw=Math.min(132,W*0.3), ix=W-iw-12, iy=12, m=iw/74;
+  c.fillStyle="rgba(12,20,28,.78)";c.strokeStyle="rgba(118,214,234,.5)";c.lineWidth=1;
+  c.beginPath();c.rect(ix,iy,iw,iw);c.fill();c.stroke();
+  c.fillStyle="#93a8b7";c.font="11px "+SANS;c.textAlign="left";c.textBaseline="top";c.fillText("평면도",ix+7,iy+6);
+  var tcx=ix+iw-12*m, tcy=iy+iw/2+4;
+  c.fillStyle="#3b4853";c.fillRect(tcx-6*m,tcy-6*m,12*m,12*m);
+  var ang=(4+26*(1-s.arm))*Math.PI/180;
+  c.strokeStyle="#9aa8b3";c.lineWidth=3;c.lineCap="round";
+  [-1,1].forEach(function(sg){
+    var py0=tcy+sg*5.2*m, px0=tcx-6*m;
+    c.beginPath();c.moveTo(px0,py0);c.lineTo(px0-Math.cos(ang)*36*m,py0+sg*Math.sin(ang)*36*m-sg*0.6*m);c.stroke();
+  });
+  c.lineCap="butt";
+  var sx=tcx-20*m+Math.max(-40,cx)*m*0.8;
+  if(cx>-42){
+    c.fillStyle=s.arm>0.98?"#86e2ab":"#1f262c";c.strokeStyle="#e8eef2";c.lineWidth=1.2;
+    c.beginPath();c.arc(sx,tcy,4.5*m,0,7);c.fill();c.stroke();
+  }
+  if(t>=18){c.fillStyle="#86e2ab";c.font="600 11px "+SANS;c.textAlign="right";c.fillText("캐치 완료",ix+iw-7,iy+6);}
+}
+
+function chart(cvs,fn,ymax,lab,bands){
+  var f=fit(cvs), c=f.x, W=f.w, H=f.h, pl=44, pr=8, pt=8, pb=18;
+  c.clearRect(0,0,W,H);
+  function X(tt){return pl+(tt-T0)/(T1-T0)*(W-pl-pr);} function Y(v){return H-pb-(v/ymax)*(H-pt-pb);}
+  if(bands){
+    [[0,10,"3기",.20],[10,17,"2기",.13],[17,18,"1기",.07]].forEach(function(b){
+      c.fillStyle="rgba(255,178,62,"+b[3]+")";c.fillRect(X(b[0]),pt,X(b[1])-X(b[0]),H-pt-pb);
+      if(X(b[1])-X(b[0])>22){c.fillStyle="#ffb23e";c.font="10px "+SANS;c.textAlign="center";c.textBaseline="top";c.fillText(b[2],(X(b[0])+X(b[1]))/2,pt+2);}
+    });
+  }
+  c.strokeStyle="#2e4557";c.lineWidth=1;c.beginPath();c.moveTo(pl,Y(0));c.lineTo(W-pr,Y(0));c.moveTo(pl,Y(ymax));c.lineTo(W-pr,Y(ymax));c.stroke();
+  c.fillStyle="#93a8b7";c.font="10px "+MONO;c.textAlign="right";c.textBaseline="middle";
+  c.fillText(lab[0],pl-5,Y(ymax));c.fillText(lab[1],pl-5,Y(0));
+  c.textAlign="center";c.textBaseline="top";c.font="10px "+SANS;
+  c.fillText("점화",X(0),H-pb+4);c.fillText("캐치",X(18),H-pb+4);
+  c.strokeStyle="#76d6ea";c.lineWidth=1.8;c.beginPath();
+  for(var tt=T0;tt<=T1;tt+=0.1){var y=Y(fn(tt));if(tt===T0)c.moveTo(X(tt),y);else c.lineTo(X(tt),y);}
+  c.stroke();
+  c.strokeStyle="rgba(232,238,242,.5)";c.lineWidth=1;c.beginPath();c.moveTo(X(t),pt);c.lineTo(X(t),H-pb);c.stroke();
+  c.fillStyle="#ffb23e";c.beginPath();c.arc(X(t),Y(fn(t)),3.6,0,7);c.fill();
+}
+
+var eDots=$("tE").children;
+function hud(){
+  var s=kin(t), sec=16+t, base=22*3600+32*60+sec;
+  var hh=Math.floor(base/3600), mm=Math.floor(base%3600/60), s2=(base%60);
+  $("clock").textContent=hh+":"+(mm<10?"0":"")+mm+":"+(s2<10?"0":"")+s2.toFixed(1);
+  $("tH").textContent=s.h.toFixed(s.h<10?1:0);
+  $("tV").textContent=s.v.toFixed(1);
+  $("tTh").textContent=s.th.toFixed(1);
+  $("tX").textContent=Math.abs(s.x).toFixed(1);
+  $("tTwr").textContent=s.twr.toFixed(2);
+  for(var i=0;i<3;i++)eDots[i].className=i<s.eng?"on":"";
+  var p=phaseOf(t);
+  if(p!==curPhase){
+    curPhase=p;$("capT").textContent=CAPS[p][0];$("capP").textContent=CAPS[p][1];
+    for(var j=0;j<4;j++)$("ph"+j).setAttribute("aria-pressed",j===p?"true":"false");
+  }
+  $("scrub").value=t;
+}
+function render(time){
+  drawScene(time||0);
+  chart(cv,function(x){return kin(x).v;},72,["72 m/s","0"],true);
+  chart(cth,function(x){return kin(x).th;},90,["90°","0°"],false);
+  hud();
+}
+function frame(time){
+  var dt=last?Math.min(0.05,(time-last)/1000):0; last=time;
+  if(playing){t+=dt*speed; if(t>T1)t=T0;}
+  render(time);
+  requestAnimationFrame(frame);
+}
+function setPlay(p){playing=p;$("play").textContent=p?"일시정지":"재생";}
+$("play").addEventListener("click",function(){setPlay(!playing);});
+$("scrub").addEventListener("input",function(e){t=parseFloat(e.target.value);setPlay(false);});
+$("speed").addEventListener("change",function(e){speed=parseFloat(e.target.value);});
+$("vec").addEventListener("change",function(e){showVec=e.target.checked;});
+[0,1,2,3].forEach(function(i){$("ph"+i).addEventListener("click",function(){t=parseFloat(this.getAttribute("data-t"));if(!reduce)setPlay(true);});});
+setPlay(playing);
+
+function calc(){
+  var m=parseFloat($("cm").value)*1000, a=parseFloat($("ca").value);
+  var vt=Math.sqrt(2*m*G/(1.2*470)), h=vt*vt/(2*a), tb=vt/a, dv=vt+G*tb, mp=m*(Math.exp(dv/(330*G))-1)/1000;
+  $("cmV").textContent=(m/1000).toFixed(0)+" t";$("caV").textContent=a.toFixed(1)+" m/s²";
+  $("oV").textContent=vt.toFixed(1);$("oH").textContent=h.toFixed(0);$("oT").textContent=tb.toFixed(1);
+  $("oD").textContent=dv.toFixed(0);$("oP").textContent=mp.toFixed(1);
+}
+$("cm").addEventListener("input",calc);$("ca").addEventListener("input",calc);calc();
+
+render(0);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
